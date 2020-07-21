@@ -244,6 +244,8 @@ class RootFileReader(object):
 
         :param path_to_stack: Absolute path in the current TFile.
         :type path_to_stack: str
+	:param name_of_hist: Histogram name contained in THStack object
+        :type name_of_hist: str
         :param \**kwargs: See below
 
         :Keyword Arguments:
