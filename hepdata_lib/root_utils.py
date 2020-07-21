@@ -7,7 +7,6 @@ from hepdata_lib.helpers import check_file_existence
 
 class RootFileReader(object):
     """Easily extract information from ROOT histograms, graphs, etc"""
-
     def __init__(self, tfile):
         self._tfile = None
         self.tfile = tfile
@@ -238,6 +237,43 @@ class RootFileReader(object):
                 limit_values = []
                 actual_index += 1
         return values
+
+    def read_stack_1d(self, path_to_stack, name_of_hist, **kwargs) :
+        # pylint: disable=anomalous-backslash-in-string
+        r"""Read in a TH1 from a THStack.
+
+        :param path_to_stack: Absolute path in the current TFile.
+        :type path_to_stack: str
+        :param \**kwargs: See below
+
+        :Keyword Arguments:
+            * *xlim* (``tuple``) --
+                limit x-axis range to consider (xmin, xmax)
+            * *force_symmetric_errors* --
+                Force readout of symmetric errors instead of determining type automatically
+
+        :returns: dict -- For a description of the contents,
+            check the documentation of the get_hist_1d_points function
+        """
+        xlim = kwargs.pop('xlim', (None, None))
+        force_symmetric_errors = kwargs.pop('force_symmetric_errors', False)
+        if kwargs:
+            raise TypeError('Unexpected **kwargs: %r' % kwargs)
+        assert isinstance(xlim, (tuple, list))
+        assert len(xlim) == 2
+        if xlim[0] and xlim[1]:
+            assert all(isinstance(val, (int, float)) for val in xlim)
+            assert xlim[0] < xlim[1]
+
+        stack = self.retrieve_object(path_to_stack)
+        histList = stack.GetHists()
+        histNameList = [histList[i].GetName() for i in range(stack.GetNhists())]
+        if name_of_hist in histNameList :
+            hist = histList[histNameList.index(name_of_hist)]
+        else : 
+            raise RuntimeError("No histogram of name '{0}' found. Available histograms in THStack {1}".format(name_of_hist, histNameList))
+
+        return get_hist_1d_points(hist, xlim=xlim, force_symmetric_errors=force_symmetric_errors)
 
 def get_hist_2d_points(hist, **kwargs):
     # pylint: disable=anomalous-backslash-in-string,too-many-locals
