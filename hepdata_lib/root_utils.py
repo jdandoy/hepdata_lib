@@ -4,6 +4,7 @@ from collections import defaultdict
 import numpy as np
 import ROOT as r
 from hepdata_lib.helpers import check_file_existence
+import ctypes
 
 class RootFileReader(object):
     """Easily extract information from ROOT histograms, graphs, etc"""
@@ -67,10 +68,13 @@ class RootFileReader(object):
         # If the Get operation was successful, just return
         # Otherwise, try canvas approach
         if obj:
+            #h_FromCany = obj.GetListOfPrimitives().FindObject("h_Nm1_mTmin_SROL3l_combined_brZ_33_brW_33_bre_33_brm_33_mass_500")
+            #print(h_FromCany.GetName()) 
             return obj
         parts = path_to_object.split("/")
         path_to_canvas = "/".join(parts[0:-1])
         name = parts[-1]
+        #name = "h_Nm1_mTmin_SROL3l_combined_brZ_33_brW_33_bre_33_brm_33_mass_800"
 
         try:
             canv = self.tfile.Get(path_to_canvas)
@@ -105,6 +109,19 @@ class RootFileReader(object):
         """
         graph = self.retrieve_object(path_to_graph)
         return get_graph_points(graph)
+
+    def read_graph_2d(self, path_to_graph):
+        """Extract lists of X and Y values from a TGraph2D.
+
+        :param path_to_graph: Absolute path in the current TFile.
+        :type path_to_graph: str
+
+        :returns: dict -- For a description of the contents,
+            check the documentation of the get_graph_points function.
+
+        """
+        graph = self.retrieve_object(path_to_graph)
+        return get_graph_2d_points(graph)
 
     def read_hist_2d(self, path_to_hist, **kwargs):
         # pylint: disable=anomalous-backslash-in-string
@@ -268,12 +285,21 @@ class RootFileReader(object):
             assert xlim[0] < xlim[1]
 
         stack = self.retrieve_object(path_to_stack)
+        if not isinstance(stack, r.THStack):
+            raise TypeError("Expected to input to be THStack, instead got '{0}'".format(type(stack)))
+	# Gets TH1s that make up the stack    
         histList = stack.GetHists()
-        histNameList = [histList[i].GetName() for i in range(stack.GetNhists())]
-        if name_of_hist in histNameList :
-            hist = histList[histNameList.index(name_of_hist)]
+        if args.sumofstack :
+            hist = histList[0].Clone("sumhist")
+            hist.Reset()
+            for i in range(stack.GetNhists()) :
+                hist.Add(histList[i])
         else : 
-            raise RuntimeError("No histogram of name '{0}' found. Available histograms in THStack {1}".format(name_of_hist, histNameList))
+            histNameList = [histList[i].GetName() for i in range(stack.GetNhists())]
+            if name_of_hist in histNameList :
+                hist = histList[histNameList.index(name_of_hist)]
+            else : 
+                raise RuntimeError("No histogram of name '{0}' found. Available histograms in THStack {1}".format(name_of_hist, histNameList))
 
         return get_hist_1d_points(hist, xlim=xlim, force_symmetric_errors=force_symmetric_errors)
 
@@ -337,6 +363,7 @@ def get_hist_2d_points(hist, **kwargs):
         for y_bin in range(iymin, iymax):
             y_val = hist.GetYaxis().GetBinCenter(y_bin)
             z_val = hist.GetBinContent(x_bin, y_bin)
+            if z_val <= 0.0 : continue
 
             if symmetric:
                 dz_val = hist.GetBinError(x_bin, y_bin)
@@ -419,7 +446,6 @@ def get_hist_1d_points(hist, **kwargs):
 
     return points
 
-
 def get_graph_points(graph):
     """
     Extract lists of X and Y values from a TGraph.
@@ -445,11 +471,11 @@ def get_graph_points(graph):
     points = defaultdict(list)
 
     for i in range(graph.GetN()):
-        x_val = r.Double()
-        y_val = r.Double()
+        x_val = ctypes.c_double()
+        y_val = ctypes.c_double()
         graph.GetPoint(i, x_val, y_val)
-        points["x"].append(float(x_val))
-        points["y"].append(float(y_val))
+        points["x"].append(float(x_val.value))
+        points["y"].append(float(y_val.value))
         if isinstance(graph, r.TGraphErrors):
             points["dx"].append(graph.GetErrorX(i))
             points["dy"].append(graph.GetErrorY(i))
@@ -458,5 +484,46 @@ def get_graph_points(graph):
                                  graph.GetErrorXhigh(i)))
             points["dy"].append((-graph.GetErrorYlow(i),
                                  graph.GetErrorYhigh(i)))
+
+    return points
+
+def get_graph_2d_points(graph):
+    """
+    Extract lists of X and Y values from a TGraph2D.
+
+    :param graph: The graph to extract values from.
+    :type graph: TGraph, TGraphErrors, TGraphAsymmErrors
+
+    :returns: dict -- Lists of x, y, z values saved in dictionary (keys are "x" and "y" and "z").
+        If the input graph is a TGraph2DErrors,
+        the dictionary also contains the errors (keys "dx" and "dy" and "dz").
+        For symmetric errors, the errors are simply given as a list of values.
+        For asymmetric errors, a list of tuples of (down,up) values is given.
+
+    """
+
+    # Check input
+    if not isinstance(graph, (r.TGraph2D, r.TGraph2DErrors)):
+        raise TypeError(
+            "Expected to input to be TGraph or similar, instead got '{0}'".
+            format(type(graph)))
+
+    # Extract points
+    points = {}
+    for key in ["x", "y", "z"]:
+        points[key] = []
+
+    for i in range(graph.GetN()):
+        x_val = ctypes.c_double()
+        y_val = ctypes.c_double()
+        z_val = ctypes.c_double()
+        graph.GetPoint(i, x_val, y_val, z_val)
+        points["x"].append(float(x_val.value))
+        points["y"].append(float(y_val.value))
+        points["z"].append(float(z_val.value))
+        if isinstance(graph, r.TGraph2DErrors):
+            points["dx"].append(graph.GetErrorX(i))
+            points["dy"].append(graph.GetErrorY(i))
+            points["dz"].append(graph.GetErrorZ(i))
 
     return points
