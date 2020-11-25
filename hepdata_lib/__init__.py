@@ -285,8 +285,12 @@ class Table(object):
                 os.path.splitext(image_file)[0].rsplit("/", 1)[1])
             thumb_out_image_file = "thumb_" + out_image_file
             # first convert to png, then create thumbnail
-            command = "convert -flatten -density 300 -fuzz 1% -trim +repage {} {}/{}".format(
-                image_file, outdir, out_image_file)
+            #command = "convert -flatten -density 300 -fuzz 1% -trim +repage {} {}/{}".format(
+            if os.path.getsize(image_file)/1000.0 > 22.5 :
+              #print(image_file)
+              command = "convert -flatten -density 165 -fuzz 1% -trim +repage {} {}/{}".format( image_file, outdir, out_image_file)
+            else :
+              command = "convert -flatten -density 200 -fuzz 1% -trim +repage {} {}/{}".format( image_file, outdir, out_image_file)
             command_ok = helpers.execute_command(command)
             if not command_ok:
                 print("ImageMagick does not seem to be installed \
@@ -396,6 +400,17 @@ class Submission(object):
         """
         if isinstance(table, Table):
             self.tables.append(table)
+        else:
+            raise TypeError("Unknown object type: {0}".format(str(type(table))))
+
+    def insert_table(self, table, index):
+        """Insert table to tables list at specified index.
+
+        :param table: The table to be added.
+        :type table: Table.
+        """
+        if isinstance(table, Table):
+            self.tables.insert(index, table)
         else:
             raise TypeError("Unknown object type: {0}".format(str(type(table))))
 
@@ -569,6 +584,13 @@ class Uncertainty(object):
         if self.is_symmetric:
             self._values = values
         else:
+            #tmp_values = []
+            #for x in values :
+            #    if x[0] is '' : 
+            #        tmp_values.append(('',''))
+            #    else: 
+            #        tmp_values.append((float(x[0]),float(x[1])))
+            #self._values = tmp_values
             self._values = [(float(x[0]), float(x[1])) for x in values]
 
     def set_values_from_intervals(self, intervals, nominal):
