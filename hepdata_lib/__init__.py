@@ -341,6 +341,7 @@ class Table(object):
         shortname = self.name.lower().replace(" ", "_")
         outfile_path = os.path.join(
             outdir, '{NAME}.yaml'.format(NAME=shortname))
+        print("JEFF", outdir, shortname, self.name)
         with open(outfile_path, 'w') as outfile:
             yaml.dump(table, outfile, default_flow_style=False)
 
@@ -533,6 +534,10 @@ class Submission(object):
 
         # Copy additional resource files
         self.copy_files(outdir)
+
+        # Jeff replace all (-1e-12,1e-12) with ('','')
+        os.system("sed -i \"s:-1.0e-12:'':g\" {0}/*.yaml".format(outdir))
+        os.system("sed -i \"s:1.0e-12:'':g\" {0}/*.yaml".format(outdir))
 
         # Put everything into a tarfile
         tar = tarfile.open("submission.tar.gz", "w:gz")
